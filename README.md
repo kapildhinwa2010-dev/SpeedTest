@@ -1,0 +1,2 @@
+# SpeedTest
+Test inference speed
