@@ -1,18 +1,23 @@
 # SpeedTest - Timing tests for compression methods as a library
 # Part of the Kapildhinwa2010-dev Toolkit.
 
-# SpeedTest timing module.
+"""Wall-clock timing suite for the four toolkit compression strategies.
 
-Lineage: all toolkit repos. Benchmarks four compression strategies (SVD rank,
-Fourier basis, quantization, hybrid) on random and structured matrices and
-reports size reduction vs reconstruction error.
+Lineage: all toolkit repos. Measures single-call latency (median of
+repeats) for SVD rank, quantization, Fourier basis and hybrid compression
+on a given matrix, alongside the usual accuracy benchmark.
+
+HONEST LIMITATIONS: timings are machine-dependent single-process Python
+timings - they exclude serialization and decompression, and say nothing
+about GPU or batched inference performance. Compare methods only within
+one run on one machine.
 """
 
 from __future__ import annotations
 
-import numpy as np
+import time
 
-from activation_compress_helpers import fourier_basis  # vendored helper
+import numpy as np
 
 __all__ = [
     "svd_compress",
@@ -20,6 +25,8 @@ __all__ = [
     "fourier_compress",
     "hybrid_compress",
     "benchmark",
+    "time_methods",
+    "speed_report",
 ]
 
 
@@ -54,9 +61,14 @@ def fourier_compress(matrix: np.ndarray, num_coeffs: int = 4) -> np.ndarray:
     matrix = _check(matrix)
     if num_coeffs < 1:
         raise ValueError("num_coeffs must be >= 1")
-    basis = fourier_basis(matrix.shape[1], num_coeffs)
+    t = np.linspace(0.0, 2.0 * np.pi, matrix.shape[1], endpoint=False)
+    cols = [np.ones_like(t)]
+    for k in range(1, num_coeffs + 1):
+        cols.append(np.cos(k * t))
+        cols.append(np.sin(k * t))
+    basis = np.stack(cols, axis=1)
     coeffs, _, _, _ = np.linalg.lstsq(basis, matrix.T, rcond=None)
-    return (coeffs.T @ basis.T)
+    return coeffs.T @ basis.T
 
 
 def hybrid_compress(matrix: np.ndarray, rank: int = 4, bits: int = 8) -> np.ndarray:
@@ -64,18 +76,22 @@ def hybrid_compress(matrix: np.ndarray, rank: int = 4, bits: int = 8) -> np.ndar
     return quantize(svd_compress(matrix, rank=rank), bits=bits)
 
 
+def _methods():
+    return {
+        "svd_rank4": lambda m: svd_compress(m, rank=4),
+        "quantize8": lambda m: quantize(m, bits=8),
+        "fourier4": lambda m: fourier_compress(m, num_coeffs=4),
+        "hybrid": lambda m: hybrid_compress(m, rank=4, bits=8),
+    }
+
+
 def benchmark(matrix: np.ndarray) -> list:
-    """Run all methods; return dicts with method, error and storage estimate."""
+    """Run all methods on the CLEAN matrix; error vs the matrix itself."""
     matrix = _check(matrix)
     results = []
-    methods = {
-        "svd_rank4": svd_compress(matrix, rank=4),
-        "quantize8": quantize(matrix, bits=8),
-        "fourier4": fourier_compress(matrix, num_coeffs=4),
-        "hybrid": hybrid_compress(matrix, rank=4, bits=8),
-    }
     norm = float(np.linalg.norm(matrix))
-    for name, approx in methods.items():
+    for name, fn in _methods().items():
+        approx = fn(matrix)
         rel_error = float(np.linalg.norm(matrix - approx)) / norm if norm else 0.0
         results.append({
             "method": name,
@@ -93,8 +109,6 @@ def time_methods(matrix: np.ndarray, repeats: int = 5) -> dict:
     serialization or decompression, and absolute numbers depend on the
     machine. Compare methods only within one run.
     """
-    import time
-
     matrix = _check(matrix)
     if repeats < 1:
         raise ValueError("repeats must be >= 1")
