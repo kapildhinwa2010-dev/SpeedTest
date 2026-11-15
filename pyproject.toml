@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "speedtest"
+version = "0.1.0"
+description = "SpeedTest - Timing tests for compression methods as a library"
+requires-python = ">=3.9"
+dependencies = ["numpy>=1.24"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
