@@ -3,6 +3,8 @@ import pytest
 
 from speedtest import (
     benchmark,
+    speed_report,
+    time_methods,
     fourier_compress,
     hybrid_compress,
     quantize,
