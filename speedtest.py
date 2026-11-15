@@ -1,7 +1,7 @@
 # SpeedTest - Timing tests for compression methods as a library
 # Part of the Kapildhinwa2010-dev Toolkit.
 
-"""CompressNet - compression benchmark suite.
+# SpeedTest timing module.
 
 Lineage: all toolkit repos. Benchmarks four compression strategies (SVD rank,
 Fourier basis, quantization, hybrid) on random and structured matrices and
@@ -83,3 +83,41 @@ def benchmark(matrix: np.ndarray) -> list:
             "passed": rel_error < 0.5,
         })
     return results
+
+
+def time_methods(matrix: np.ndarray, repeats: int = 5) -> dict:
+    """Wall-clock time of each compression method (median of ``repeats``).
+
+    Returns {method: {"median_seconds": s, "min_seconds": s}}. Times are
+    single-call latencies on the given matrix size; they do NOT include
+    serialization or decompression, and absolute numbers depend on the
+    machine. Compare methods only within one run.
+    """
+    import time
+
+    matrix = _check(matrix)
+    if repeats < 1:
+        raise ValueError("repeats must be >= 1")
+    timing = {}
+    for name, fn in _methods().items():
+        samples = []
+        for _ in range(int(repeats)):
+            start = time.perf_counter()
+            fn(matrix)
+            samples.append(time.perf_counter() - start)
+        samples_sorted = sorted(samples)
+        mid = len(samples_sorted) // 2
+        median = samples_sorted[mid] if len(samples_sorted) % 2 else (samples_sorted[mid - 1] + samples_sorted[mid]) / 2.0
+        timing[name] = {"median_seconds": median, "min_seconds": samples_sorted[0]}
+    return timing
+
+
+def speed_report(matrix: np.ndarray, repeats: int = 5) -> dict:
+    """Combine benchmark errors with timing; flags the fastest method.
+
+    "fastest" is by median wall-clock time only - it says nothing about
+    reconstruction quality; check "benchmark" for accuracy trade-offs.
+    """
+    timing = time_methods(matrix, repeats=repeats)
+    fastest = min(timing, key=lambda n: timing[n]["median_seconds"])
+    return {"timing": timing, "fastest": fastest, "errors": benchmark(matrix)}

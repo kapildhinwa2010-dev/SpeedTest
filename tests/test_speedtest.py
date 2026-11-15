@@ -71,3 +71,27 @@ def test_benchmark_rejects_1d():
 def test_benchmark_low_error_for_smooth():
     results = benchmark(_smooth(rows=32, cols=128))
     assert all(r["relative_error"] < 0.5 for r in results)
+
+
+def test_time_methods_returns_all():
+    timing = time_methods(_smooth(), repeats=2)
+    assert set(timing) == {"svd_rank4", "quantize8", "fourier4", "hybrid"}
+    for entry in timing.values():
+        assert entry["median_seconds"] >= 0.0
+        assert entry["min_seconds"] >= 0.0
+
+
+def test_time_methods_rejects_bad_repeats():
+    with pytest.raises(ValueError):
+        time_methods(_smooth(), repeats=0)
+
+
+def test_speed_report_has_fastest():
+    report = speed_report(_smooth(), repeats=2)
+    assert report["fastest"] in {"svd_rank4", "quantize8", "fourier4", "hybrid"}
+    assert len(report["errors"]) == 4
+
+
+def test_speed_report_rejects_1d():
+    with pytest.raises(ValueError):
+        speed_report(np.ones(5))
